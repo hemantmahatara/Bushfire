@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bushfire Susceptibility – Hume & Gippsland</title>
+  <meta name="description" content="3D WebGIS dashboard of an AHP-weighted bushfire susceptibility model for the Hume and Gippsland regions of Victoria.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css" rel="stylesheet">
+  <link href="css/style.css" rel="stylesheet">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2c1.2 3.6-.9 5.4-2.4 7.3C8 11.3 7 13 7 15a5 5 0 0 0 10 0c0-2.3-1.1-3.7-2.1-5 .1 1.5-.4 2.6-1.4 3.2.3-3.9-.5-7.6-1.5-11.2Z"/></svg>
+      <div>
+        <h1>Bushfire Susceptibility</h1>
+        <p>Hume &amp; Gippsland, Victoria · AHP-weighted multicriteria evaluation</p>
+      </div>
+    </div>
+    <nav class="views" aria-label="Zoom to">
+      <button data-fly="all" class="on">Study area</button>
+      <button data-fly="Hume">Hume</button>
+      <button data-fly="Gippsland">Gippsland</button>
+    </nav>
+    <div class="top-actions">
+      <select id="basemap" aria-label="Basemap">
+        <option value="light">Light</option>
+        <option value="dark">Dark</option>
+        <option value="satellite">Satellite</option>
+        <option value="topo">Topographic</option>
+      </select>
+      <button id="panelToggle" class="icon-btn" aria-label="Toggle panel">
+        <svg viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main>
+    <aside id="panel" class="panel">
+      <div class="tabs" role="tablist">
+        <button class="tab on" data-tab="overview">Overview</button>
+        <button class="tab" data-tab="layers">Layers</button>
+        <button class="tab" data-tab="validation">Validation</button>
+        <button class="tab" data-tab="lgas">LGAs</button>
+        <button class="tab" data-tab="data">Data</button>
+      </div>
+
+      <section class="pane on" id="tab-overview">
+        <div class="kpis">
+          <div class="kpi"><span id="kpiArea">–</span><small>km² study area</small></div>
+          <div class="kpi hot"><span id="kpiHigh">–</span><small>high or very high</small></div>
+          <div class="kpi"><span id="kpiAuc">–</span><small>AUC vs fire history</small></div>
+          <div class="kpi"><span id="kpiBurnt">–</span><small>burnt 1990–2025</small></div>
+        </div>
+        <div class="card">
+          <h3>Susceptibility class area</h3>
+          <p class="muted">Share of each region (%)</p>
+          <div class="chart"><canvas id="chClass"></canvas></div>
+        </div>
+        <div class="card">
+          <h3>AHP criteria weights</h3>
+          <p class="muted" id="crText"></p>
+          <div class="chart short"><canvas id="chWeights"></canvas></div>
+        </div>
+        <div class="card text">
+          <h3>Method</h3>
+          <ol class="steps">
+            <li>Five criteria reclassified to a 1–5 scale on a common 90 m grid (GDA2020 / Vicgrid).</li>
+            <li>Weights from an AHP pairwise comparison matrix.</li>
+            <li>Weighted overlay, then natural-breaks classification into five classes.</li>
+            <li>Validated against DEECA fire history 1990–2025 and compared with 2009 and 2019–20 burn severity.</li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="pane" id="tab-layers">
+        <div class="card">
+          <h3>Raster layer</h3>
+          <div id="rasterList" class="layer-list"></div>
+          <label class="slider">Opacity <input id="opacity" type="range" min="0" max="1" step="0.05" value="0.85"><output id="opacityOut">85%</output></label>
+        </div>
+        <div class="card">
+          <h3>Overlays</h3>
+          <label class="switch"><input type="checkbox" id="tgHillshade" checked><span></span>Hillshade relief</label>
+          <label class="switch"><input type="checkbox" id="tgLgas" checked><span></span>LGA boundaries</label>
+          <label class="switch"><input type="checkbox" id="tgRegions" checked><span></span>Region outline</label>
+          <label class="switch"><input type="checkbox" id="tgPoints"><span></span>Validation points</label>
+          <label class="switch"><input type="checkbox" id="tgExtrude"><span></span>3D LGA columns (% high + very high)</label>
+          <label class="switch"><input type="checkbox" id="tgLabels" checked><span></span>Place labels</label>
+        </div>
+        <div class="card">
+          <h3>3D terrain</h3>
+          <label class="switch"><input type="checkbox" id="tgTerrain" checked><span></span>Show terrain</label>
+          <label class="slider">Exaggeration <input id="exag" type="range" min="1" max="4" step="0.1" value="1.8"><output id="exagOut">1.8×</output></label>
+          <div class="btn-row">
+            <button id="btnTour" class="btn">Orbit</button>
+            <button id="btnReset" class="btn ghost">Reset view</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="pane" id="tab-validation">
+        <div class="card">
+          <h3>Frequency ratio by class</h3>
+          <p class="muted">FR &gt; 1 means the class burnt more than its share of area</p>
+          <div class="chart"><canvas id="chFr"></canvas></div>
+        </div>
+        <div class="card">
+          <h3>Area under ROC curve</h3>
+          <p class="muted" id="ptsText"></p>
+          <div class="chart tall"><canvas id="chAuc"></canvas></div>
+        </div>
+        <div class="card">
+          <h3>Burn severity by susceptibility class</h3>
+          <p class="muted" id="sevText"></p>
+          <div class="chart"><canvas id="chSev"></canvas></div>
+        </div>
+        <div class="card text">
+          <h3>Reading the results</h3>
+          <p>Burnt area rises from 17% of very-low cells to 68% of very-high cells, so the model ranks where fire has occurred. Fuel and slope carry most of the signal; the climate criteria point the other way because the wettest, coolest mountains are also the most forested and most often burnt. Severity is only weakly linked to susceptibility, which suggests fire weather on the day drives how hot a fire burns.</p>
+        </div>
+      </section>
+
+      <section class="pane" id="tab-lgas">
+        <div class="card">
+          <h3>LGA ranking</h3>
+          <p class="muted">Share of each LGA in the high and very high classes. Click to zoom.</p>
+          <div class="sortbar">
+            <button data-sort="pct_high" class="on">% high</button>
+            <button data-sort="pct_burnt">% burnt</button>
+            <button data-sort="mean_score">Mean score</button>
+          </div>
+          <ul id="lgaList" class="lga-list"></ul>
+        </div>
+      </section>
+
+      <section class="pane" id="tab-data">
+        <div class="card">
+          <h3>Datasets</h3>
+          <div id="dataList" class="data-list"></div>
+        </div>
+        <div class="card text">
+          <h3>About</h3>
+          <p>GEOM1163 GIS Principles project, RMIT University. Hemant Kumar Mahatara (s4219284).</p>
+          <p class="muted">Analysis grid 90 m, EPSG:7899. Web layers resampled to ~230 m in Web Mercator for display, so values shown here are approximate. Not an operational fire risk product.</p>
+        </div>
+      </section>
+    </aside>
+
+    <div id="map"></div>
+
+    <div id="legend" class="legend"></div>
+
+    <div id="info" class="info hidden">
+      <button class="close" id="infoClose" aria-label="Close">×</button>
+      <div id="infoBody"></div>
+    </div>
+
+    <div id="loader" class="loader"><div class="spin"></div>Loading layers…</div>
+  </main>
+
+  <script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
